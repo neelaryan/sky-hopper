@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
 
 // Game Constants
 const CANVAS_WIDTH = 320;
@@ -69,13 +68,6 @@ const Game: React.FC = () => {
   const setGameOver = useCallback(() => {
     setFinalScore(score.current);
     setGameState('gameOver');
-    setShowDifficultyButtons(true);
-  }, []);
-  
-  const startGame = useCallback((selectedDifficulty: Difficulty) => {
-    setDifficulty(selectedDifficulty);
-    setShowDifficultyButtons(false);
-    resetGame();
   }, []);
 
   const resetGame = useCallback(() => {
@@ -88,16 +80,22 @@ const Game: React.FC = () => {
     setGameState('playing');
   }, []);
 
+  const startGame = useCallback((selectedDifficulty: Difficulty) => {
+    setDifficulty(selectedDifficulty);
+    setShowDifficultyButtons(false);
+    resetGame();
+  }, [resetGame]);
+
+  const handleMainMenu = useCallback(() => {
+    setShowDifficultyButtons(true);
+    setGameState('start');
+  }, []);
+
   const handleInput = useCallback(() => {
     if (gameState === 'playing') {
       birdVelocity.current = JUMP_FORCE;
-    } else if (gameState === 'gameOver') {
-        // In game over, a tap/click will just show the difficulty selection again
-        // and not instantly restart. The user will then choose a difficulty to restart.
-        setShowDifficultyButtons(true);
-        setGameState('start');
     }
-  }, [gameState, resetGame]);
+  }, [gameState]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -107,16 +105,24 @@ const Game: React.FC = () => {
       }
     };
 
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleInput]);
+
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const handleCanvasClick = (event: MouseEvent) => {
-        if (showDifficultyButtons) {
-            const rect = canvas.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
 
-            // Simple button hit detection
+        if (gameState === 'start' && showDifficultyButtons) {
             const buttonY = CANVAS_HEIGHT / 2 - 15;
             const buttonHeight = 30;
             const easyButtonX = CANVAS_WIDTH / 2 - 120;
@@ -133,22 +139,39 @@ const Game: React.FC = () => {
                     startGame('hard');
                 }
             }
-        } else {
+        } else if (gameState === 'gameOver') {
+            const restartButtonY = CANVAS_HEIGHT / 2 + 40;
+            const buttonHeight = 30;
+            const buttonWidth = 110;
+            
+            // Restart Button
+            const restartButtonX = CANVAS_WIDTH / 2 - 120;
+            if (y > restartButtonY && y < restartButtonY + buttonHeight && x > restartButtonX && x < restartButtonX + buttonWidth) {
+                resetGame();
+            }
+
+            // Main Menu Button
+            const mainMenuButtonX = CANVAS_WIDTH / 2 + 10;
+            if (y > restartButtonY && y < restartButtonY + buttonHeight && x > mainMenuButtonX && x < mainMenuButtonX + buttonWidth) {
+                handleMainMenu();
+            }
+        } else if (gameState === 'playing') {
              handleInput();
         }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
     canvas.addEventListener('mousedown', handleCanvasClick);
-    canvas.addEventListener('touchstart', handleInput, { passive: false });
-
+    const touchHandler = (e: TouchEvent) => {
+      e.preventDefault();
+      handleInput();
+    }
+    canvas.addEventListener('touchstart', touchHandler, { passive: false });
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
       canvas.removeEventListener('mousedown', handleCanvasClick);
-      canvas.removeEventListener('touchstart', handleInput);
+      canvas.removeEventListener('touchstart', touchHandler);
     };
-  }, [handleInput, showDifficultyButtons, startGame]);
+  }, [gameState, showDifficultyButtons, startGame, resetGame, handleMainMenu, handleInput]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -277,6 +300,7 @@ const Game: React.FC = () => {
             context.fillText('Hard', CANVAS_WIDTH / 2 + 80, CANVAS_HEIGHT / 2);
 
         } else {
+            // This case might not be reachable with current logic but kept for safety.
             context.strokeText('Tap or Space to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
             context.fillText('Tap or Space to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
         }
@@ -292,9 +316,23 @@ const Game: React.FC = () => {
         context.strokeText(`Score: ${finalScore}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
         context.fillText(`Score: ${finalScore}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
         
-        context.font = "bold 20px 'Space Grotesk', sans-serif";
-        context.strokeText('Tap or Space to Restart', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
-        context.fillText('Tap or Space to Restart', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
+        // Draw buttons for restart and main menu
+        const buttonY = CANVAS_HEIGHT / 2 + 40;
+        const buttonHeight = 30;
+        const buttonWidth = 110;
+        context.font = "bold 18px 'Space Grotesk', sans-serif";
+
+        // Restart button
+        context.fillStyle = '#4CAF50';
+        context.fillRect(CANVAS_WIDTH / 2 - 120, buttonY, buttonWidth, buttonHeight);
+        context.fillStyle = TEXT_COLOR;
+        context.fillText('Restart', CANVAS_WIDTH / 2 - 65, buttonY + 15);
+
+        // Main Menu button
+        context.fillStyle = '#FFC107';
+        context.fillRect(CANVAS_WIDTH / 2 + 10, buttonY, buttonWidth, buttonHeight);
+        context.fillStyle = TEXT_COLOR;
+        context.fillText('Main Menu', CANVAS_WIDTH / 2 + 65, buttonY + 15);
       }
       
       animationFrameId = requestAnimationFrame(gameLoop);
@@ -305,7 +343,7 @@ const Game: React.FC = () => {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [gameState, finalScore, setGameOver, resetGame, difficulty, showDifficultyButtons, startGame]);
+  }, [gameState, finalScore, setGameOver, resetGame, difficulty, showDifficultyButtons, startGame, handleMainMenu]);
 
   return (
     <div className="relative">
