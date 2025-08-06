@@ -49,14 +49,22 @@ type Pipe = {
   passed: boolean;
 };
 
-type GameState = 'start' | 'playing' | 'gameOver';
+type Profile = {
+    name: string;
+    highScore: number;
+};
+
+type GameState = 'profile-menu' | 'create-profile' | 'select-profile' | 'leaderboard' | 'start' | 'playing' | 'gameOver';
 
 const Game: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [gameState, setGameState] = useState<GameState>('start');
+  const [gameState, setGameState] = useState<GameState>('profile-menu');
   const [finalScore, setFinalScore] = useState(0);
   const [difficulty, setDifficulty] = useState<Difficulty>('hard');
   const [showDifficultyButtons, setShowDifficultyButtons] = useState(true);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
+  const [newProfileName, setNewProfileName] = useState('');
 
   // Using refs for game state that changes every frame to avoid re-renders
   const birdY = useRef(CANVAS_HEIGHT / 2);
@@ -65,10 +73,37 @@ const Game: React.FC = () => {
   const score = useRef(0);
   const lastPipeTime = useRef(0);
 
+  useEffect(() => {
+    try {
+        const savedProfiles = localStorage.getItem('sky-hopper-profiles');
+        if (savedProfiles) {
+            setProfiles(JSON.parse(savedProfiles));
+        }
+    } catch (error) {
+        console.error("Could not load profiles from localStorage", error);
+    }
+  }, []);
+
+  const saveProfiles = useCallback((updatedProfiles: Profile[]) => {
+    try {
+        localStorage.setItem('sky-hopper-profiles', JSON.stringify(updatedProfiles));
+        setProfiles(updatedProfiles);
+    } catch (error) {
+        console.error("Could not save profiles to localStorage", error);
+    }
+  }, []);
+  
   const setGameOver = useCallback(() => {
     setFinalScore(score.current);
+    if (currentProfile && score.current > currentProfile.highScore) {
+        const updatedProfiles = profiles.map(p => 
+            p.name === currentProfile.name ? { ...p, highScore: score.current } : p
+        );
+        saveProfiles(updatedProfiles);
+        setCurrentProfile(prev => prev ? {...prev, highScore: score.current} : null);
+    }
     setGameState('gameOver');
-  }, []);
+  }, [currentProfile, profiles, saveProfiles]);
 
   const resetGame = useCallback(() => {
     birdY.current = CANVAS_HEIGHT / 2;
@@ -88,7 +123,8 @@ const Game: React.FC = () => {
 
   const handleMainMenu = useCallback(() => {
     setShowDifficultyButtons(true);
-    setGameState('start');
+    setCurrentProfile(null);
+    setGameState('profile-menu');
   }, []);
 
   const handleInput = useCallback(() => {
@@ -96,12 +132,32 @@ const Game: React.FC = () => {
       birdVelocity.current = JUMP_FORCE;
     }
   }, [gameState]);
+  
+  const handleCreateProfile = useCallback(() => {
+    if (newProfileName.trim() && !profiles.find(p => p.name === newProfileName.trim())) {
+        const newProfile: Profile = { name: newProfileName.trim(), highScore: 0 };
+        const updatedProfiles = [...profiles, newProfile];
+        saveProfiles(updatedProfiles);
+        setCurrentProfile(newProfile);
+        setNewProfileName('');
+        setGameState('start');
+    }
+  }, [newProfileName, profiles, saveProfiles]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         e.preventDefault();
         handleInput();
+      }
+      if (gameState === 'create-profile') {
+        if (e.key === 'Enter') {
+          handleCreateProfile();
+        } else if (e.key === 'Backspace') {
+          setNewProfileName(name => name.slice(0, -1));
+        } else if (e.key.length === 1 && newProfileName.length < 15) {
+          setNewProfileName(name => name + e.key);
+        }
       }
     };
 
@@ -110,8 +166,7 @@ const Game: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleInput]);
-
+  }, [handleInput, gameState, handleCreateProfile, newProfileName]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -122,7 +177,54 @@ const Game: React.FC = () => {
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
 
-        if (gameState === 'start' && showDifficultyButtons) {
+        if (gameState === 'profile-menu') {
+            const buttonY = CANVAS_HEIGHT / 2 - 20;
+            const buttonHeight = 40;
+            const buttonWidth = 180;
+            const createX = CANVAS_WIDTH / 2 - buttonWidth / 2;
+            const selectX = createX;
+            const leaderboardX = createX;
+
+            if (y > buttonY && y < buttonY + buttonHeight) {
+                setGameState('create-profile');
+            } else if (y > buttonY + 50 && y < buttonY + 50 + buttonHeight) {
+                if (profiles.length > 0) setGameState('select-profile');
+            } else if (y > buttonY + 100 && y < buttonY + 100 + buttonHeight) {
+                setGameState('leaderboard');
+            }
+        } else if (gameState === 'select-profile') {
+            const backButtonY = CANVAS_HEIGHT - 60;
+            const backButtonHeight = 40;
+            const backButtonWidth = 120;
+            const backButtonX = CANVAS_WIDTH / 2 - backButtonWidth / 2;
+            if (y > backButtonY && y < backButtonY + backButtonHeight && x > backButtonX && x < backButtonX + backButtonWidth) {
+                setGameState('profile-menu');
+                return;
+            }
+
+            profiles.forEach((profile, index) => {
+                const profileY = 100 + index * 40;
+                if (y > profileY && y < profileY + 30) {
+                    setCurrentProfile(profile);
+                    setGameState('start');
+                }
+            });
+        } else if (gameState === 'leaderboard' || gameState === 'create-profile') {
+             const backButtonY = CANVAS_HEIGHT - 60;
+            const backButtonHeight = 40;
+            const backButtonWidth = 120;
+            const backButtonX = CANVAS_WIDTH / 2 - backButtonWidth / 2;
+            if (y > backButtonY && y < backButtonY + backButtonHeight && x > backButtonX && x < backButtonX + backButtonWidth) {
+                setNewProfileName('');
+                setGameState('profile-menu');
+            }
+            if (gameState === 'create-profile') {
+                const createButtonY = CANVAS_HEIGHT / 2 + 30;
+                 if (y > createButtonY && y < createButtonY + 40) {
+                    handleCreateProfile();
+                 }
+            }
+        } else if (gameState === 'start' && showDifficultyButtons) {
             const buttonY = CANVAS_HEIGHT / 2 - 15;
             const buttonHeight = 30;
             const easyButtonX = CANVAS_WIDTH / 2 - 120;
@@ -171,7 +273,7 @@ const Game: React.FC = () => {
       canvas.removeEventListener('mousedown', handleCanvasClick);
       canvas.removeEventListener('touchstart', touchHandler);
     };
-  }, [gameState, showDifficultyButtons, startGame, resetGame, handleMainMenu, handleInput]);
+  }, [gameState, showDifficultyButtons, startGame, resetGame, handleMainMenu, handleInput, profiles, handleCreateProfile]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -242,22 +344,26 @@ const Game: React.FC = () => {
       context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       // Draw pipes
-      context.fillStyle = PIPE_COLOR;
-      context.strokeStyle = PIPE_BORDER_COLOR;
-      context.lineWidth = 4;
-      pipes.current.forEach(pipe => {
-          context.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
-          context.strokeRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
-          context.fillRect(pipe.x, pipe.y + diffSettings.PIPE_GAP, PIPE_WIDTH, pipe.bottomHeight);
-          context.strokeRect(pipe.x, pipe.y + diffSettings.PIPE_GAP, PIPE_WIDTH, pipe.bottomHeight);
-      });
+      if (gameState === 'playing' || gameState === 'gameOver') {
+          context.fillStyle = PIPE_COLOR;
+          context.strokeStyle = PIPE_BORDER_COLOR;
+          context.lineWidth = 4;
+          pipes.current.forEach(pipe => {
+              context.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
+              context.strokeRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
+              context.fillRect(pipe.x, pipe.y + diffSettings.PIPE_GAP, PIPE_WIDTH, pipe.bottomHeight);
+              context.strokeRect(pipe.x, pipe.y + diffSettings.PIPE_GAP, PIPE_WIDTH, pipe.bottomHeight);
+          });
+      }
 
       // Draw bird
-      context.fillStyle = BIRD_COLOR;
-      context.strokeStyle = '#c6a600';
-      context.lineWidth = 2;
-      context.fillRect(BIRD_X, birdY.current, BIRD_WIDTH, BIRD_HEIGHT);
-      context.strokeRect(BIRD_X, birdY.current, BIRD_WIDTH, BIRD_HEIGHT);
+       if (gameState === 'playing' || gameState === 'gameOver') {
+            context.fillStyle = BIRD_COLOR;
+            context.strokeStyle = '#c6a600';
+            context.lineWidth = 2;
+            context.fillRect(BIRD_X, birdY.current, BIRD_WIDTH, BIRD_HEIGHT);
+            context.strokeRect(BIRD_X, birdY.current, BIRD_WIDTH, BIRD_HEIGHT);
+       }
       
       // Draw UI
       context.font = "bold 36px 'Space Grotesk', sans-serif";
@@ -267,7 +373,95 @@ const Game: React.FC = () => {
       context.textAlign = 'center';
       context.textBaseline = 'middle';
 
-      if (gameState === 'start') {
+    if (gameState === 'profile-menu') {
+        context.strokeText('Sky Hopper', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 4);
+        context.fillText('Sky Hopper', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 4);
+
+        context.font = "bold 24px 'Space Grotesk', sans-serif";
+        const buttonWidth = 180;
+        const buttonHeight = 40;
+        const buttonX = CANVAS_WIDTH / 2 - buttonWidth / 2;
+
+        context.fillStyle = '#4CAF50';
+        context.fillRect(buttonX, CANVAS_HEIGHT / 2 - 20, buttonWidth, buttonHeight);
+        context.fillStyle = TEXT_COLOR;
+        context.fillText('Create Profile', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+        context.fillStyle = profiles.length > 0 ? '#FFC107' : '#9E9E9E';
+        context.fillRect(buttonX, CANVAS_HEIGHT / 2 + 30, buttonWidth, buttonHeight);
+        context.fillStyle = TEXT_COLOR;
+        context.fillText('Select Profile', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
+
+        context.fillStyle = '#2196F3';
+        context.fillRect(buttonX, CANVAS_HEIGHT / 2 + 80, buttonWidth, buttonHeight);
+        context.fillStyle = TEXT_COLOR;
+        context.fillText('Leaderboard', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 100);
+
+    } else if (gameState === 'create-profile') {
+        context.strokeText('Create Profile', CANVAS_WIDTH / 2, 100);
+        context.fillText('Create Profile', CANVAS_WIDTH / 2, 100);
+        context.font = "20px 'Space Grotesk', sans-serif";
+        context.strokeText('Enter your name:', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
+        context.fillText('Enter your name:', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
+        
+        context.fillStyle = 'white';
+        context.fillRect(CANVAS_WIDTH/2 - 100, CANVAS_HEIGHT/2 - 20, 200, 40);
+        context.fillStyle = 'black';
+        context.font = "bold 24px 'Space Grotesk', sans-serif";
+        context.fillText(newProfileName, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        
+        const buttonWidth = 120;
+        const buttonHeight = 40;
+        context.fillStyle = '#4CAF50';
+        context.fillRect(CANVAS_WIDTH/2 - buttonWidth/2, CANVAS_HEIGHT / 2 + 30, buttonWidth, buttonHeight);
+        context.fillStyle = TEXT_COLOR;
+        context.fillText('Create', CANVAS_WIDTH / 2, CANVAS_HEIGHT/2 + 50);
+
+        // Back button
+        context.fillStyle = '#F44336';
+        context.fillRect(CANVAS_WIDTH / 2 - 60, CANVAS_HEIGHT - 60, 120, 40);
+        context.fillStyle = TEXT_COLOR;
+        context.fillText('Back', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 40);
+    } else if (gameState === 'select-profile') {
+        context.strokeText('Select Profile', CANVAS_WIDTH / 2, 60);
+        context.fillText('Select Profile', CANVAS_WIDTH / 2, 60);
+        context.font = "bold 20px 'Space Grotesk', sans-serif";
+        
+        profiles.forEach((profile, index) => {
+            context.fillStyle = '#FFC107';
+            context.fillRect(40, 100 + index * 40, CANVAS_WIDTH - 80, 30);
+            context.fillStyle = TEXT_COLOR;
+            context.fillText(profile.name, CANVAS_WIDTH / 2, 115 + index * 40);
+        });
+
+        // Back button
+        context.fillStyle = '#F44336';
+        context.fillRect(CANVAS_WIDTH / 2 - 60, CANVAS_HEIGHT - 60, 120, 40);
+        context.fillStyle = TEXT_COLOR;
+        context.fillText('Back', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 40);
+
+    } else if (gameState === 'leaderboard') {
+        context.strokeText('Leaderboard', CANVAS_WIDTH / 2, 60);
+        context.fillText('Leaderboard', CANVAS_WIDTH / 2, 60);
+        context.font = "bold 20px 'Space Grotesk', sans-serif";
+
+        const sortedProfiles = [...profiles].sort((a, b) => b.highScore - a.highScore);
+        sortedProfiles.forEach((profile, index) => {
+            context.textAlign = 'left';
+            context.strokeText(`${index + 1}. ${profile.name}`, 40, 120 + index * 30);
+            context.fillText(`${index + 1}. ${profile.name}`, 40, 120 + index * 30);
+            context.textAlign = 'right';
+            context.strokeText(`${profile.highScore}`, CANVAS_WIDTH - 40, 120 + index * 30);
+            context.fillText(`${profile.highScore}`, CANVAS_WIDTH - 40, 120 + index * 30);
+        });
+        context.textAlign = 'center';
+         // Back button
+        context.fillStyle = '#F44336';
+        context.fillRect(CANVAS_WIDTH / 2 - 60, CANVAS_HEIGHT - 60, 120, 40);
+        context.fillStyle = TEXT_COLOR;
+        context.fillText('Back', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 40);
+
+    } else if (gameState === 'start') {
         context.strokeText('Sky Hopper', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
         context.fillText('Sky Hopper', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
         context.font = "bold 20px 'Space Grotesk', sans-serif";
@@ -306,8 +500,18 @@ const Game: React.FC = () => {
         }
 
       } else if (gameState === 'playing') {
-        context.strokeText(score.current.toString(), CANVAS_WIDTH / 2, 60);
-        context.fillText(score.current.toString(), CANVAS_WIDTH / 2, 60);
+        context.font = "bold 20px 'Space Grotesk', sans-serif";
+        context.textAlign = 'left';
+        context.strokeText(`Player: ${currentProfile?.name}`, 10, 30);
+        context.fillText(`Player: ${currentProfile?.name}`, 10, 30);
+        context.textAlign = 'right';
+        context.strokeText(`High Score: ${currentProfile?.highScore}`, CANVAS_WIDTH - 10, 30);
+        context.fillText(`High Score: ${currentProfile?.highScore}`, CANVAS_WIDTH - 10, 30);
+
+        context.textAlign = 'center';
+        context.font = "bold 36px 'Space Grotesk', sans-serif";
+        context.strokeText(score.current.toString(), CANVAS_WIDTH / 2, 80);
+        context.fillText(score.current.toString(), CANVAS_WIDTH / 2, 80);
       } else if (gameState === 'gameOver') {
         context.strokeText('Game Over', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
         context.fillText('Game Over', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
@@ -343,7 +547,7 @@ const Game: React.FC = () => {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [gameState, finalScore, setGameOver, resetGame, difficulty, showDifficultyButtons, startGame, handleMainMenu]);
+  }, [gameState, finalScore, setGameOver, resetGame, difficulty, showDifficultyButtons, startGame, handleMainMenu, profiles, currentProfile, newProfileName, handleCreateProfile]);
 
   return (
     <div className="relative">
