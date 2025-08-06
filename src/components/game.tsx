@@ -265,7 +265,95 @@ const Game: React.FC = () => {
     canvas.addEventListener('mousedown', handleCanvasClick);
     const touchHandler = (e: TouchEvent) => {
       e.preventDefault();
-      handleInput();
+      if (gameState === 'playing') {
+        handleInput();
+      } else {
+        // Replicate click logic for touch on menus
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+
+        if (gameState === 'profile-menu') {
+            const buttonY = CANVAS_HEIGHT / 2 - 20;
+            const buttonHeight = 40;
+            const buttonWidth = 180;
+            const createX = CANVAS_WIDTH / 2 - buttonWidth / 2;
+            
+            if (y > buttonY && y < buttonY + buttonHeight && x > createX && x < createX + buttonWidth) {
+                setGameState('create-profile');
+            } else if (y > buttonY + 50 && y < buttonY + 50 + buttonHeight && x > createX && x < createX + buttonWidth) {
+                if (profiles.length > 0) setGameState('select-profile');
+            } else if (y > buttonY + 100 && y < buttonY + 100 + buttonHeight && x > createX && x < createX + buttonWidth) {
+                setGameState('leaderboard');
+            }
+        } else if (gameState === 'select-profile') {
+            const backButtonY = CANVAS_HEIGHT - 60;
+            const backButtonHeight = 40;
+            const backButtonWidth = 120;
+            const backButtonX = CANVAS_WIDTH / 2 - backButtonWidth / 2;
+            if (y > backButtonY && y < backButtonY + backButtonHeight && x > backButtonX && x < backButtonX + backButtonWidth) {
+                setGameState('profile-menu');
+                return;
+            }
+
+            profiles.forEach((profile, index) => {
+                const profileY = 100 + index * 40;
+                if (y > profileY && y < profileY + 30) {
+                    setCurrentProfile(profile);
+                    setGameState('start');
+                }
+            });
+        } else if (gameState === 'leaderboard' || gameState === 'create-profile') {
+             const backButtonY = CANVAS_HEIGHT - 60;
+            const backButtonHeight = 40;
+            const backButtonWidth = 120;
+            const backButtonX = CANVAS_WIDTH / 2 - backButtonWidth / 2;
+            if (y > backButtonY && y < backButtonY + backButtonHeight && x > backButtonX && x < backButtonX + backButtonWidth) {
+                setNewProfileName('');
+                setGameState('profile-menu');
+            }
+            if (gameState === 'create-profile') {
+                const createButtonY = CANVAS_HEIGHT / 2 + 30;
+                const buttonWidth = 120;
+                const buttonX = CANVAS_WIDTH / 2 - buttonWidth / 2;
+                 if (y > createButtonY && y < createButtonY + 40 && x > buttonX && x < buttonX + buttonWidth) {
+                    handleCreateProfile();
+                 }
+            }
+        } else if (gameState === 'start' && showDifficultyButtons) {
+            const buttonY = CANVAS_HEIGHT / 2 - 15;
+            const buttonHeight = 30;
+            const easyButtonX = CANVAS_WIDTH / 2 - 120;
+            const mediumButtonX = CANVAS_WIDTH / 2 - 40;
+            const hardButtonX = CANVAS_WIDTH / 2 + 40;
+            const buttonWidth = 80;
+
+            if (y > buttonY && y < buttonY + buttonHeight) {
+                if (x > easyButtonX && x < easyButtonX + buttonWidth) {
+                    startGame('easy');
+                } else if (x > mediumButtonX && x < mediumButtonX + buttonWidth) {
+                    startGame('medium');
+                } else if (x > hardButtonX && x < hardButtonX + buttonWidth) {
+                    startGame('hard');
+                }
+            }
+        } else if (gameState === 'gameOver') {
+            const restartButtonY = CANVAS_HEIGHT / 2 + 40;
+            const buttonHeight = 30;
+            const buttonWidth = 110;
+            
+            const restartButtonX = CANVAS_WIDTH / 2 - 120;
+            if (y > restartButtonY && y < restartButtonY + buttonHeight && x > restartButtonX && x < restartButtonX + buttonWidth) {
+                resetGame();
+            }
+
+            const mainMenuButtonX = CANVAS_WIDTH / 2 + 10;
+            if (y > restartButtonY && y < restartButtonY + buttonHeight && x > mainMenuButtonX && x < mainMenuButtonX + buttonWidth) {
+                handleMainMenu();
+            }
+        }
+      }
     }
     canvas.addEventListener('touchstart', touchHandler, { passive: false });
 
