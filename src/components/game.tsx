@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
 
 // Game Constants
 const CANVAS_WIDTH = 320;
@@ -9,11 +10,29 @@ const BIRD_WIDTH = 34;
 const BIRD_HEIGHT = 24;
 const BIRD_X = 60;
 const PIPE_WIDTH = 52;
-const PIPE_GAP = 120; // Gap between upper and lower pipes
 const GRAVITY = 0.5;
 const JUMP_FORCE = -8;
-const PIPE_SPEED = -2;
-const PIPE_SPAWN_INTERVAL = 1500; // in ms
+
+// Difficulty Settings
+const difficulties = {
+  easy: {
+    PIPE_GAP: 150,
+    PIPE_SPEED: -1.2,
+    PIPE_SPAWN_INTERVAL: 2200,
+  },
+  medium: {
+    PIPE_GAP: 120,
+    PIPE_SPEED: -1.5,
+    PIPE_SPAWN_INTERVAL: 1800,
+  },
+  hard: {
+    PIPE_GAP: 120,
+    PIPE_SPEED: -2,
+    PIPE_SPAWN_INTERVAL: 1500,
+  },
+};
+
+type Difficulty = keyof typeof difficulties;
 
 // Colors
 const SKY_COLOR = "#B0E2FF";
@@ -37,6 +56,8 @@ const Game: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<GameState>('start');
   const [finalScore, setFinalScore] = useState(0);
+  const [difficulty, setDifficulty] = useState<Difficulty>('hard');
+  const [showDifficultyButtons, setShowDifficultyButtons] = useState(true);
 
   // Using refs for game state that changes every frame to avoid re-renders
   const birdY = useRef(CANVAS_HEIGHT / 2);
@@ -48,6 +69,13 @@ const Game: React.FC = () => {
   const setGameOver = useCallback(() => {
     setFinalScore(score.current);
     setGameState('gameOver');
+    setShowDifficultyButtons(true);
+  }, []);
+  
+  const startGame = useCallback((selectedDifficulty: Difficulty) => {
+    setDifficulty(selectedDifficulty);
+    setShowDifficultyButtons(false);
+    resetGame();
   }, []);
 
   const resetGame = useCallback(() => {
@@ -63,8 +91,11 @@ const Game: React.FC = () => {
   const handleInput = useCallback(() => {
     if (gameState === 'playing') {
       birdVelocity.current = JUMP_FORCE;
-    } else {
-      resetGame();
+    } else if (gameState === 'gameOver') {
+        // In game over, a tap/click will just show the difficulty selection again
+        // and not instantly restart. The user will then choose a difficulty to restart.
+        setShowDifficultyButtons(true);
+        setGameState('start');
     }
   }, [gameState, resetGame]);
 
@@ -76,16 +107,48 @@ const Game: React.FC = () => {
       }
     };
 
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleCanvasClick = (event: MouseEvent) => {
+        if (showDifficultyButtons) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            // Simple button hit detection
+            const buttonY = CANVAS_HEIGHT / 2 - 15;
+            const buttonHeight = 30;
+            const easyButtonX = CANVAS_WIDTH / 2 - 120;
+            const mediumButtonX = CANVAS_WIDTH / 2 - 40;
+            const hardButtonX = CANVAS_WIDTH / 2 + 40;
+            const buttonWidth = 80;
+
+            if (y > buttonY && y < buttonY + buttonHeight) {
+                if (x > easyButtonX && x < easyButtonX + buttonWidth) {
+                    startGame('easy');
+                } else if (x > mediumButtonX && x < mediumButtonX + buttonWidth) {
+                    startGame('medium');
+                } else if (x > hardButtonX && x < hardButtonX + buttonWidth) {
+                    startGame('hard');
+                }
+            }
+        } else {
+             handleInput();
+        }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('mousedown', handleInput);
-    window.addEventListener('touchstart', handleInput);
+    canvas.addEventListener('mousedown', handleCanvasClick);
+    canvas.addEventListener('touchstart', handleInput, { passive: false });
+
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('mousedown', handleInput);
-      window.removeEventListener('touchstart', handleInput);
+      canvas.removeEventListener('mousedown', handleCanvasClick);
+      canvas.removeEventListener('touchstart', handleInput);
     };
-  }, [handleInput]);
+  }, [handleInput, showDifficultyButtons, startGame]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -94,6 +157,7 @@ const Game: React.FC = () => {
     if (!context) return;
 
     let animationFrameId: number;
+    const diffSettings = difficulties[difficulty];
 
     const gameLoop = (timestamp: number) => {
       // Update game logic
@@ -103,13 +167,13 @@ const Game: React.FC = () => {
         birdY.current += birdVelocity.current;
         
         // Pipe generation
-        if (timestamp - lastPipeTime.current > PIPE_SPAWN_INTERVAL) {
-            const gapY = Math.random() * (CANVAS_HEIGHT - PIPE_GAP - 100) + 50;
+        if (timestamp - lastPipeTime.current > diffSettings.PIPE_SPAWN_INTERVAL) {
+            const gapY = Math.random() * (CANVAS_HEIGHT - diffSettings.PIPE_GAP - 100) + 50;
             pipes.current.push({
                 x: CANVAS_WIDTH,
                 y: gapY,
                 topHeight: gapY,
-                bottomHeight: CANVAS_HEIGHT - gapY - PIPE_GAP,
+                bottomHeight: CANVAS_HEIGHT - gapY - diffSettings.PIPE_GAP,
                 passed: false,
             });
             lastPipeTime.current = timestamp;
@@ -117,7 +181,7 @@ const Game: React.FC = () => {
 
         // Move pipes
         pipes.current.forEach(pipe => {
-            pipe.x += PIPE_SPEED;
+            pipe.x += diffSettings.PIPE_SPEED;
         });
 
         // Remove off-screen pipes
@@ -133,7 +197,7 @@ const Game: React.FC = () => {
         for (const pipe of pipes.current) {
             const isColliding = bird.x < pipe.x + PIPE_WIDTH &&
                                 bird.x + bird.width > pipe.x &&
-                                (bird.y < pipe.topHeight || bird.y + bird.height > pipe.y + PIPE_GAP);
+                                (bird.y < pipe.topHeight || bird.y + bird.height > pipe.y + diffSettings.PIPE_GAP);
             
             if (isColliding) {
                 setGameOver();
@@ -161,8 +225,8 @@ const Game: React.FC = () => {
       pipes.current.forEach(pipe => {
           context.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
           context.strokeRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
-          context.fillRect(pipe.x, pipe.y + PIPE_GAP, PIPE_WIDTH, pipe.bottomHeight);
-          context.strokeRect(pipe.x, pipe.y + PIPE_GAP, PIPE_WIDTH, pipe.bottomHeight);
+          context.fillRect(pipe.x, pipe.y + diffSettings.PIPE_GAP, PIPE_WIDTH, pipe.bottomHeight);
+          context.strokeRect(pipe.x, pipe.y + diffSettings.PIPE_GAP, PIPE_WIDTH, pipe.bottomHeight);
       });
 
       // Draw bird
@@ -181,11 +245,42 @@ const Game: React.FC = () => {
       context.textBaseline = 'middle';
 
       if (gameState === 'start') {
-        context.strokeText('Sky Hopper', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
-        context.fillText('Sky Hopper', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
+        context.strokeText('Sky Hopper', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+        context.fillText('Sky Hopper', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
         context.font = "bold 20px 'Space Grotesk', sans-serif";
-        context.strokeText('Tap or Space to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-        context.fillText('Tap or Space to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+        if(showDifficultyButtons){
+            context.strokeText('Select Difficulty', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
+            context.fillText('Select Difficulty', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
+            
+            // Draw buttons
+            const buttonY = CANVAS_HEIGHT / 2 - 15;
+            const buttonHeight = 30;
+            const buttonWidth = 80;
+
+            // Easy
+            context.fillStyle = '#4CAF50';
+            context.fillRect(CANVAS_WIDTH / 2 - 120, buttonY, buttonWidth, buttonHeight);
+            context.fillStyle = TEXT_COLOR;
+            context.fillText('Easy', CANVAS_WIDTH / 2 - 80, CANVAS_HEIGHT / 2);
+
+            // Medium
+            context.fillStyle = '#FFC107';
+            context.fillRect(CANVAS_WIDTH / 2 - 40, buttonY, buttonWidth, buttonHeight);
+            context.fillStyle = TEXT_COLOR;
+            context.fillText('Medium', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+            // Hard
+            context.fillStyle = '#F44336';
+            context.fillRect(CANVAS_WIDTH / 2 + 40, buttonY, buttonWidth, buttonHeight);
+            context.fillStyle = TEXT_COLOR;
+            context.fillText('Hard', CANVAS_WIDTH / 2 + 80, CANVAS_HEIGHT / 2);
+
+        } else {
+            context.strokeText('Tap or Space to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+            context.fillText('Tap or Space to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        }
+
       } else if (gameState === 'playing') {
         context.strokeText(score.current.toString(), CANVAS_WIDTH / 2, 60);
         context.fillText(score.current.toString(), CANVAS_WIDTH / 2, 60);
@@ -210,15 +305,17 @@ const Game: React.FC = () => {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [gameState, finalScore, setGameOver, resetGame]);
+  }, [gameState, finalScore, setGameOver, resetGame, difficulty, showDifficultyButtons, startGame]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={CANVAS_WIDTH}
-      height={CANVAS_HEIGHT}
-      className="rounded-b-lg"
-    />
+    <div className="relative">
+        <canvas
+            ref={canvasRef}
+            width={CANVAS_WIDTH}
+            height={CANVAS_HEIGHT}
+            className="rounded-b-lg cursor-pointer"
+        />
+    </div>
   );
 };
 
