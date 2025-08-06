@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
 
 // Game Constants
 const CANVAS_WIDTH = 320;
@@ -153,10 +155,6 @@ const Game: React.FC = () => {
       if (gameState === 'create-profile') {
         if (e.key === 'Enter') {
           handleCreateProfile();
-        } else if (e.key === 'Backspace') {
-          setNewProfileName(name => name.slice(0, -1));
-        } else if (e.key.length === 1 && newProfileName.length < 15) {
-          setNewProfileName(name => name + e.key);
         }
       }
     };
@@ -166,7 +164,7 @@ const Game: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleInput, gameState, handleCreateProfile, newProfileName]);
+  }, [handleInput, gameState, handleCreateProfile]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -182,8 +180,6 @@ const Game: React.FC = () => {
             const buttonHeight = 40;
             const buttonWidth = 180;
             const createX = CANVAS_WIDTH / 2 - buttonWidth / 2;
-            const selectX = createX;
-            const leaderboardX = createX;
 
             if (y > buttonY && y < buttonY + buttonHeight) {
                 setGameState('create-profile');
@@ -209,7 +205,7 @@ const Game: React.FC = () => {
                     setGameState('start');
                 }
             });
-        } else if (gameState === 'leaderboard' || gameState === 'create-profile') {
+        } else if (gameState === 'leaderboard') {
              const backButtonY = CANVAS_HEIGHT - 60;
             const backButtonHeight = 40;
             const backButtonWidth = 120;
@@ -217,12 +213,6 @@ const Game: React.FC = () => {
             if (y > backButtonY && y < backButtonY + backButtonHeight && x > backButtonX && x < backButtonX + backButtonWidth) {
                 setNewProfileName('');
                 setGameState('profile-menu');
-            }
-            if (gameState === 'create-profile') {
-                const createButtonY = CANVAS_HEIGHT / 2 + 30;
-                 if (y > createButtonY && y < createButtonY + 40) {
-                    handleCreateProfile();
-                 }
             }
         } else if (gameState === 'start' && showDifficultyButtons) {
             const buttonY = CANVAS_HEIGHT / 2 - 15;
@@ -304,7 +294,7 @@ const Game: React.FC = () => {
                     setGameState('start');
                 }
             });
-        } else if (gameState === 'leaderboard' || gameState === 'create-profile') {
+        } else if (gameState === 'leaderboard') {
              const backButtonY = CANVAS_HEIGHT - 60;
             const backButtonHeight = 40;
             const backButtonWidth = 120;
@@ -312,14 +302,6 @@ const Game: React.FC = () => {
             if (y > backButtonY && y < backButtonY + backButtonHeight && x > backButtonX && x < backButtonX + backButtonWidth) {
                 setNewProfileName('');
                 setGameState('profile-menu');
-            }
-            if (gameState === 'create-profile') {
-                const createButtonY = CANVAS_HEIGHT / 2 + 30;
-                const buttonWidth = 120;
-                const buttonX = CANVAS_WIDTH / 2 - buttonWidth / 2;
-                 if (y > createButtonY && y < createButtonY + 40 && x > buttonX && x < buttonX + buttonWidth) {
-                    handleCreateProfile();
-                 }
             }
         } else if (gameState === 'start' && showDifficultyButtons) {
             const buttonY = CANVAS_HEIGHT / 2 - 15;
@@ -492,24 +474,6 @@ const Game: React.FC = () => {
         context.strokeText('Enter your name:', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
         context.fillText('Enter your name:', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
         
-        context.fillStyle = 'white';
-        context.fillRect(CANVAS_WIDTH/2 - 100, CANVAS_HEIGHT/2 - 20, 200, 40);
-        context.fillStyle = 'black';
-        context.font = "bold 24px 'Space Grotesk', sans-serif";
-        context.fillText(newProfileName, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-        
-        const buttonWidth = 120;
-        const buttonHeight = 40;
-        context.fillStyle = '#4CAF50';
-        context.fillRect(CANVAS_WIDTH/2 - buttonWidth/2, CANVAS_HEIGHT / 2 + 30, buttonWidth, buttonHeight);
-        context.fillStyle = TEXT_COLOR;
-        context.fillText('Create', CANVAS_WIDTH / 2, CANVAS_HEIGHT/2 + 50);
-
-        // Back button
-        context.fillStyle = '#F44336';
-        context.fillRect(CANVAS_WIDTH / 2 - 60, CANVAS_HEIGHT - 60, 120, 40);
-        context.fillStyle = TEXT_COLOR;
-        context.fillText('Back', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 40);
     } else if (gameState === 'select-profile') {
         context.strokeText('Select Profile', CANVAS_WIDTH / 2, 60);
         context.fillText('Select Profile', CANVAS_WIDTH / 2, 60);
@@ -635,7 +599,7 @@ const Game: React.FC = () => {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [gameState, finalScore, setGameOver, resetGame, difficulty, showDifficultyButtons, startGame, handleMainMenu, profiles, currentProfile, newProfileName, handleCreateProfile]);
+  }, [gameState, finalScore, setGameOver, resetGame, difficulty, showDifficultyButtons, startGame, handleMainMenu, profiles, currentProfile]);
 
   return (
     <div className="relative">
@@ -645,6 +609,41 @@ const Game: React.FC = () => {
             height={CANVAS_HEIGHT}
             className="rounded-b-lg cursor-pointer"
         />
+        {gameState === 'create-profile' && (
+            <div 
+                className="absolute flex flex-col items-center justify-center"
+                style={{ 
+                    top: `calc(${CANVAS_HEIGHT / 2}px - 20px)`, 
+                    left: '50%', 
+                    transform: 'translateX(-50%)', 
+                    width: '220px' 
+                }}
+            >
+                <Input
+                    type="text"
+                    placeholder="Enter your name"
+                    value={newProfileName}
+                    onChange={(e) => setNewProfileName(e.target.value)}
+                    maxLength={15}
+                    className="bg-white text-black text-center text-lg font-bold"
+                    autoFocus
+                />
+                <div className="flex gap-2 mt-4">
+                     <Button onClick={handleCreateProfile} className="bg-[#4CAF50] hover:bg-[#45a049]">
+                        Create
+                    </Button>
+                    <Button 
+                        onClick={() => {
+                            setNewProfileName('');
+                            setGameState('profile-menu');
+                        }}
+                        className="bg-[#F44336] hover:bg-[#da190b]"
+                    >
+                        Back
+                    </Button>
+                </div>
+            </div>
+        )}
     </div>
   );
 };
