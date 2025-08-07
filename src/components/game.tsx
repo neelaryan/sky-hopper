@@ -11,24 +11,24 @@ const BIRD_WIDTH = 34;
 const BIRD_HEIGHT = 24;
 const BIRD_X = 60;
 const PIPE_WIDTH = 52;
-const GRAVITY = 0.5;
-const JUMP_FORCE = -8;
+const GRAVITY = 0.25;
+const JUMP_FORCE = -6;
 
 // Difficulty Settings
 const difficulties = {
   easy: {
     PIPE_GAP: 150,
-    PIPE_SPEED: -1.2,
+    PIPE_SPEED: -70, // pixels per second
     PIPE_SPAWN_INTERVAL: 2200,
   },
   medium: {
     PIPE_GAP: 120,
-    PIPE_SPEED: -1.5,
+    PIPE_SPEED: -90, // pixels per second
     PIPE_SPAWN_INTERVAL: 1800,
   },
   hard: {
     PIPE_GAP: 120,
-    PIPE_SPEED: -2,
+    PIPE_SPEED: -120, // pixels per second
     PIPE_SPAWN_INTERVAL: 1500,
   },
 };
@@ -74,6 +74,8 @@ const Game: React.FC = () => {
   const pipes = useRef<Pipe[]>([]);
   const score = useRef(0);
   const lastPipeTime = useRef(0);
+  const lastFrameTime = useRef(0);
+
 
   useEffect(() => {
     try {
@@ -114,6 +116,7 @@ const Game: React.FC = () => {
     score.current = 0;
     setFinalScore(0);
     lastPipeTime.current = 0;
+    lastFrameTime.current = performance.now();
     setGameState('playing');
   }, []);
 
@@ -353,8 +356,12 @@ const Game: React.FC = () => {
 
     let animationFrameId: number;
     const diffSettings = difficulties[difficulty];
+    lastFrameTime.current = performance.now();
 
     const gameLoop = (timestamp: number) => {
+      const deltaTime = (timestamp - lastFrameTime.current) / 1000; // in seconds
+      lastFrameTime.current = timestamp;
+      
       // Update game logic
       if (gameState === 'playing') {
         // Gravity
@@ -376,7 +383,7 @@ const Game: React.FC = () => {
 
         // Move pipes
         pipes.current.forEach(pipe => {
-            pipe.x += diffSettings.PIPE_SPEED;
+            pipe.x += diffSettings.PIPE_SPEED * deltaTime;
         });
 
         // Remove off-screen pipes
