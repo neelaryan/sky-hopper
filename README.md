@@ -13,6 +13,11 @@ A modern and responsive Flappy Bird clone built from the ground up with Next.js,
 
 ## How to Play
 
+## Try the Game
+
+Play the game here: https://studio--sky-hopper-54nf3.us.r.appspot.com/
+
+
 The goal is simple: guide the bird through as many pipes as you can without crashing.
 
 - **Desktop**: Press the `Spacebar` key to make the bird jump.
